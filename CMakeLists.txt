@@ -35,6 +35,9 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/demos/03_epoll_single.cpp")
     add_executable(demo_epoll_single demos/03_epoll_single.cpp)
 endif()
 
-# 2. 核心：Epoll + ThreadPool (最终版)
-add_executable(server_core src/server_epoll.cpp)
-target_link_libraries(server_core Threads::Threads) # 这次必须链接线程库！
+# 2. 核心：Epoll + ThreadPool + HTTP解析 (最终版)
+# 【修改点】注意这里多了 src/http_conn.cpp
+add_executable(server_core src/server_epoll.cpp src/http_conn.cpp)
+
+# 链接线程库
+target_link_libraries(server_core Threads::Threads)
