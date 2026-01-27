@@ -1,6 +1,7 @@
 #ifndef HTTPCONN_H
 #define HTTPCONN_H
 
+#include <sys/uio.h>     // 提供 writev 函数
 #include <arpa/inet.h>   // sockaddr_in
 #include <sys/stat.h>    // stat
 #include <fcntl.h>       // open
@@ -71,19 +72,6 @@ public:
     // 3. 写数据 (响应发送给客户端)
     bool write();
 
-private:
-    // --- 私有解析方法 (状态机逻辑) ---
-    void init_parse_state();                        // 重置解析状态
-    HTTP_CODE process_read();                       // 主状态机驱动
-    HTTP_CODE parse_request_line(char* text);       // 解析请求行
-    HTTP_CODE parse_headers(char* text);            // 解析头部
-    HTTP_CODE parse_content(char* text);            // 解析内容
-    LINE_STATUS parse_line();                       // 从状态机：读取一行
-    
-    // --- 私有响应方法 ---
-    bool process_write(HTTP_CODE ret);              // 根据结果生成响应
-    // ... 这里为了简化，我们暂时只列出核心
-
 public:
     // 静态成员：所有 socket 共享同一个 epoll 实例
     static int m_epollfd;
@@ -93,20 +81,50 @@ private:
     int m_sockfd;
     sockaddr_in m_address;
 
-    // 读缓冲区
-    char m_read_buf[2048];   // 读缓冲区
-    int m_read_idx;          // 缓冲区中数据的下一个写入位置
-    int m_checked_idx;       // 当前分析到的位置
-    int m_start_line;        // 当前行的起始位置
+    char m_read_buf[2048];
+    int m_read_idx;
+    int m_checked_idx;
+    int m_start_line;
 
-    // 解析相关
-    CHECK_STATE m_check_state; // 主状态机当前状态
-    METHOD m_method;           // 请求方法
+    // 【新增】写缓冲区 (用于存放 HTTP 头部)
+    char m_write_buf[1024];
+    int m_write_idx;
 
-    // 响应相关 (文件信息)
+    CHECK_STATE m_check_state;
+    METHOD m_method;
+
+    // 【新增】文件处理相关
     char m_real_file[200];   // 文件的绝对路径
-    struct stat m_file_stat; // 文件属性
-    char* m_file_address;    // mmap 映射后的内存地址 (零拷贝)
+    struct stat m_file_stat; // 文件状态信息
+    char* m_file_address;    // mmap 映射后的内存地址
+    
+    // 【新增】writev 相关 (分散写)
+    struct iovec m_iv[2];    // io向量：m_iv[0]放头部，m_iv[1]放文件内容
+    int m_iv_count;          // 有几块内存要写
+
+    // --- 私有方法 ---
+    void init_parse_state();
+    HTTP_CODE process_read();
+    bool process_write(HTTP_CODE ret);
+
+    HTTP_CODE parse_request_line(char* text);
+    HTTP_CODE parse_headers(char* text);
+    HTTP_CODE parse_content(char* text);
+    
+    HTTP_CODE do_request(); // 【核心】分析请求的文件
+    
+    LINE_STATUS parse_line();
+    void unmap(); // 【核心】解除内存映射
+    
+    // 【新增】辅助函数：往写缓冲里填数据
+    bool add_response(const char* format, ...);
+    bool add_content(const char* content);
+    bool add_status_line(int status, const char* title);
+    bool add_headers(int content_length);
+    bool add_content_type();
+    bool add_content_length(int content_length);
+    bool add_linger();
+    bool add_blank_line();
 };
 
 #endif

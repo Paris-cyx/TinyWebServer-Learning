@@ -27,7 +27,7 @@ int main() {
         perror("Bind failed");
         return -1;
     }
-    listen(server_fd, 5);
+    listen(server_fd, 10000);
 
     // 创建 epoll 对象
     int epoll_fd = epoll_create1(0);
@@ -51,7 +51,7 @@ int main() {
 
     struct epoll_event events[MAX_EVENTS];
 
-    cout << "=== TinyWebServer v1.0 启动成功 ===" << endl;
+    //cout << "=== TinyWebServer v1.0 启动成功 ===" << endl;
 
     while (true) {
         int n = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
