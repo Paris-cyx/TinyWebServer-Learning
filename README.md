@@ -27,8 +27,7 @@
 - **QPS**：10,000+
 - **结果**：**0 失败 (Zero Failure)**
 
-![Pressure Test Result](./assets/stress_test.png)
-*(注：请将 WebBench 截图命名为 stress_test.png 并放在 assets 目录下，或此处直接贴图)*
+![Pressure Test Result](resources/stress_test.png)
 
 ## 🛠️ 环境要求 (Environment)
 
