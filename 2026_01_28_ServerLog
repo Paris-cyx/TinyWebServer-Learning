@@ -9,3 +9,9 @@
 2026-01-28 22:30:42.588030 [info]: POST Request - Action:1, User:log
 2026-01-28 22:30:42.588754 [info]: Login Fail (Pass Error): log
 2026-01-28 22:30:51.978769 [info]: POST Request - Action:1, User:bali
+2026-01-28 23:05:25.331941 [info]: ========== Server Start ==========
+2026-01-28 23:05:25.331965 [info]: Log System Init Success, Async Mode Enabled
+2026-01-28 23:05:25.351093 [info]: SQL Pool Init Success, Conn Size: 8
+2026-01-28 23:41:17.955300 [info]: ========== Server Start ==========
+2026-01-28 23:41:17.955326 [info]: Log System Init Success, Async Mode Enabled
+2026-01-28 23:41:17.973622 [info]: SQL Pool Init Success, Conn Size: 8

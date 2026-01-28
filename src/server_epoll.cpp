@@ -15,7 +15,7 @@ const int MAX_FD = 65536;
 int main() {
     // 1. 初始化日志系统 (异步模式，队列长度800)
     // 这里的 "ServerLog" 是日志文件名的前缀
-    Log::Instance()->init("ServerLog", 0, 2000, 800000, 800); 
+    Log::Instance()->init("ServerLog", 1, 2000, 800000, 800); 
     
     LOG_INFO("========== Server Start ==========");
     LOG_INFO("Log System Init Success, Async Mode Enabled");
