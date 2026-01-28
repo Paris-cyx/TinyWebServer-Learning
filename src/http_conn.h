@@ -10,12 +10,21 @@
 #include <string.h>      // memset, strcpy
 #include <string>
 #include <iostream>
+#include <sys/epoll.h>   // epoll_event
+#include "sql_conn_pool.h" // 【新增】引入数据库连接池定义
 
 using namespace std;
 
+// 【新增】全局函数声明
+// 将这些函数声明放在这里，让其他文件（如 server_epoll.cpp）也能看到
+void setnonblocking(int fd);
+void addfd(int epollfd, int fd, bool one_shot);
+void removefd(int epollfd, int fd);
+void modfd(int epollfd, int fd, int ev);
+
 class HttpConn {
 public:
-    // HTTP 请求方法（目前我们只实现 GET）
+    // HTTP 请求方法（目前我们只实现 GET 和 POST）
     enum METHOD { GET = 0, POST, HEAD, PUT, DELETE, TRACE, OPTIONS, CONNECT, PATCH };
 
     // =======================================================
@@ -97,7 +106,7 @@ private:
     struct iovec m_iv[2];
     int m_iv_count;
 
-    // 【新增】POST 解析相关变量
+    // POST 解析相关变量
     char* m_string;       // 存储请求体数据 (user=123&password=123)
     int m_content_length; // 请求体长度
 
@@ -107,7 +116,7 @@ private:
 
     HTTP_CODE parse_request_line(char* text);
     HTTP_CODE parse_headers(char* text);
-    HTTP_CODE parse_content(char* text); // 【修改】以前是空的，现在要写真逻辑了
+    HTTP_CODE parse_content(char* text); 
     HTTP_CODE do_request();
     
     LINE_STATUS parse_line();
