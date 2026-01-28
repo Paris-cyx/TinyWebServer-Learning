@@ -1,15 +1,17 @@
 #include "http_conn.h"
+#include "sql_conn_pool.h" 
 #include <sys/epoll.h>
 #include <stdarg.h> 
+#include <map>  
+#include <iostream>
+#include "log.h" // 【新增】引入日志
+
+using namespace std;
 
 const char* doc_root = "resources";
 
 int HttpConn::m_epollfd = -1;
 int HttpConn::m_user_count = 0;
-
-// 注意：这里删除了 setnonblocking 的定义，因为 server_epoll.cpp 里已经不需要 include iostream 了
-// 如果编译报错 setnonblocking 重复定义，请保持原样；如果报错未定义，请把头文件里的 setnonblocking 声明留着。
-// 咱们之前的代码里 setnonblocking 是在 main 里调用的，这里其实可以保留一个作为工具函数。
 
 void setnonblocking(int fd) {
     int old_option = fcntl(fd, F_GETFL);
@@ -46,6 +48,8 @@ void HttpConn::init(int sockfd, const sockaddr_in& addr) {
     addfd(m_epollfd, sockfd, true); 
     m_user_count++;
     init_parse_state();
+    
+    // LOG_INFO("User Init, FD: %d, IP: %s", sockfd, inet_ntoa(addr.sin_addr));
 }
 
 void HttpConn::init_parse_state() {
@@ -56,6 +60,9 @@ void HttpConn::init_parse_state() {
     m_start_line = 0;
     m_write_idx = 0;
     m_file_address = 0;
+    m_content_length = 0; 
+    m_string = nullptr;   
+    
     memset(m_read_buf, 0, sizeof(m_read_buf));
     memset(m_write_buf, 0, sizeof(m_write_buf));
     memset(m_real_file, 0, sizeof(m_real_file));
@@ -112,8 +119,11 @@ HttpConn::HTTP_CODE HttpConn::parse_request_line(char* text) {
     if (!url) return BAD_REQUEST;
     *url++ = '\0';
     char* method = text;
+    
     if (strcasecmp(method, "GET") == 0) m_method = GET;
+    else if (strcasecmp(method, "POST") == 0) m_method = POST; 
     else return BAD_REQUEST;
+    
     url += strspn(url, " \t");
     char* version = strpbrk(url, " \t");
     if (!version) return BAD_REQUEST;
@@ -124,17 +134,40 @@ HttpConn::HTTP_CODE HttpConn::parse_request_line(char* text) {
         url = strchr(url, '/');
     }
     if (!url || url[0] != '/') return BAD_REQUEST;
+    
     if (strlen(url) == 1) strcat(url, "index.html");
+    
     strcpy(m_real_file, doc_root);
     int len = strlen(doc_root);
     strncpy(m_real_file + len, url, sizeof(m_real_file) - len - 1);
+    
+    // LOG_INFO("Request URL: %s", url); // 记录请求路径
+    
     m_check_state = CHECK_STATE_HEADER;
     return NO_REQUEST;
 }
 
 HttpConn::HTTP_CODE HttpConn::parse_headers(char* text) {
     if (text[0] == '\0') {
+        if (m_content_length != 0) {
+            m_check_state = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
         return GET_REQUEST; 
+    }
+    else if (strncasecmp(text, "Content-Length:", 15) == 0) {
+        text += 15;
+        text += strspn(text, " \t");
+        m_content_length = atol(text);
+    }
+    return NO_REQUEST;
+}
+
+HttpConn::HTTP_CODE HttpConn::parse_content(char* text) {
+    if (m_read_idx >= (m_checked_idx + m_content_length)) {
+        text[m_content_length] = '\0'; 
+        m_string = text; 
+        return GET_REQUEST;
     }
     return NO_REQUEST;
 }
@@ -157,8 +190,10 @@ HttpConn::HTTP_CODE HttpConn::process_read() {
                 if (ret == GET_REQUEST) return do_request();
                 break;
             case CHECK_STATE_CONTENT:
-                ret = GET_REQUEST;
-                return do_request();
+                ret = parse_content(text); 
+                if (ret == GET_REQUEST) return do_request();
+                line_status = LINE_OPEN;
+                break;
             default: return INTERNAL_ERROR;
         }
     }
@@ -166,6 +201,103 @@ HttpConn::HTTP_CODE HttpConn::process_read() {
 }
 
 HttpConn::HTTP_CODE HttpConn::do_request() {
+    const char *p = strrchr(m_real_file, '/');
+    if (!p) return BAD_REQUEST;
+    char action = *(p + 1);
+
+    char m_url[200] = {0}; 
+    int len = strlen(doc_root);
+
+    if (m_method == POST && action == '5') {
+         strcpy(m_url, "/register.html");
+    }
+    else if (m_method == POST && (action == '1' || action == '6')) {
+        char name[100] = {0};
+        char password[100] = {0};
+        
+        if(m_string != nullptr && m_content_length > 0) {
+            int i;
+            for(i = 5; i < m_content_length && m_string[i] != '&' && (i-5) < 99; ++i)
+                name[i - 5] = m_string[i];
+            name[i - 5] = '\0';
+
+            int j = 0;
+            for(i = i + 10; i < m_content_length && m_string[i] != '\0' && j < 99; ++i, ++j)
+                password[j] = m_string[i];
+            password[j] = '\0';
+        }
+
+        // 记录登录/注册请求日志
+        LOG_INFO("POST Request - Action:%c, User:%s", action, name);
+
+        MYSQL *mysql = NULL;
+        SqlConnRAII mysql_guard(&mysql, SqlConnPool::Instance()); 
+        
+        if (mysql == NULL) {
+            LOG_ERROR("DB Connection Fail");
+            strcpy(m_url, "/log_error.html");
+        } 
+        else {
+            if(action == '1') { // 登录
+                char query[256] = {0};
+                sprintf(query, "SELECT username, password FROM user WHERE username='%s' LIMIT 1", name);
+                
+                if(mysql_query(mysql, query)) {
+                    LOG_ERROR("SQL Error: %s", query);
+                    strcpy(m_url, "/log_error.html"); 
+                } else {
+                    MYSQL_RES *result = mysql_store_result(mysql);
+                    if(result && mysql_num_rows(result) > 0) {
+                        MYSQL_ROW row = mysql_fetch_row(result);
+                        if(row[1] && strcmp(password, row[1]) == 0) {
+                            LOG_INFO("Login Success: %s", name);
+                            strcpy(m_url, "/welcome.html"); 
+                        } else {
+                            LOG_INFO("Login Fail (Pass Error): %s", name);
+                            strcpy(m_url, "/log_error.html"); 
+                        }
+                    } else {
+                        LOG_INFO("Login Fail (User Not Found): %s", name);
+                        strcpy(m_url, "/log_error.html"); 
+                    }
+                    if(result) mysql_free_result(result);
+                }
+            }
+            else if(action == '6') { // 注册
+                char query[256] = {0};
+                sprintf(query, "SELECT username FROM user WHERE username='%s' LIMIT 1", name);
+                
+                if(mysql_query(mysql, query)) {
+                    LOG_ERROR("SQL Error: %s", query);
+                    strcpy(m_url, "/log_error.html");
+                } else {
+                    MYSQL_RES *result = mysql_store_result(mysql);
+                    if(result && mysql_num_rows(result) > 0) {
+                        LOG_WARN("Register Fail (User Exists): %s", name);
+                        strcpy(m_url, "/log_error.html"); 
+                    } else {
+                        char insert_sql[256] = {0};
+                        sprintf(insert_sql, "INSERT INTO user(username, password) VALUES('%s', '%s')", name, password);
+                        
+                        if(mysql_query(mysql, insert_sql)) {
+                            LOG_ERROR("SQL Insert Error: %s", insert_sql);
+                            strcpy(m_url, "/log_error.html");
+                        } else {
+                            LOG_INFO("Register Success: %s", name);
+                            strcpy(m_url, "/welcome.html"); 
+                        }
+                    }
+                    if(result) mysql_free_result(result);
+                }
+            }
+        }
+    }
+
+    if(strlen(m_url) > 0) {
+        strcpy(m_real_file, doc_root);
+        strncpy(m_real_file + len, m_url, strlen(m_url));
+    }
+
     if (stat(m_real_file, &m_file_stat) < 0) return NO_RESOURCE;
     if (!(m_file_stat.st_mode & S_IROTH)) return FORBIDDEN_REQUEST;
     if (S_ISDIR(m_file_stat.st_mode)) return BAD_REQUEST;

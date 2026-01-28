@@ -1,0 +1,11 @@
+2026-01-28 22:29:59.511098 [info]: ========== Server Start ==========
+2026-01-28 22:29:59.511159 [info]: Log System Init Success, Async Mode Enabled
+2026-01-28 22:29:59.529280 [info]: SQL Pool Init Success, Conn Size: 8
+2026-01-28 22:29:59.529873 [info]: Server Init Finish, Listening on 8080...
+2026-01-28 22:30:21.203070 [info]: POST Request - Action:6, User:log
+2026-01-28 22:30:21.215973 [info]: Register Success: log
+2026-01-28 22:30:31.671971 [info]: POST Request - Action:1, User:log
+2026-01-28 22:30:31.673120 [info]: Login Success: log
+2026-01-28 22:30:42.588030 [info]: POST Request - Action:1, User:log
+2026-01-28 22:30:42.588754 [info]: Login Fail (Pass Error): log
+2026-01-28 22:30:51.978769 [info]: POST Request - Action:1, User:bali

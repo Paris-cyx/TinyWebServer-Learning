@@ -13,8 +13,6 @@
 
 using namespace std;
 
-void setnonblocking(int fd);
-
 class HttpConn {
 public:
     // HTTP 请求方法（目前我们只实现 GET）
@@ -86,37 +84,35 @@ private:
     int m_checked_idx;
     int m_start_line;
 
-    // 【新增】写缓冲区 (用于存放 HTTP 头部)
     char m_write_buf[1024];
     int m_write_idx;
 
     CHECK_STATE m_check_state;
     METHOD m_method;
 
-    // 【新增】文件处理相关
-    char m_real_file[200];   // 文件的绝对路径
-    struct stat m_file_stat; // 文件状态信息
-    char* m_file_address;    // mmap 映射后的内存地址
+    char m_real_file[200];
+    struct stat m_file_stat;
+    char* m_file_address;
     
-    // 【新增】writev 相关 (分散写)
-    struct iovec m_iv[2];    // io向量：m_iv[0]放头部，m_iv[1]放文件内容
-    int m_iv_count;          // 有几块内存要写
+    struct iovec m_iv[2];
+    int m_iv_count;
 
-    // --- 私有方法 ---
+    // 【新增】POST 解析相关变量
+    char* m_string;       // 存储请求体数据 (user=123&password=123)
+    int m_content_length; // 请求体长度
+
     void init_parse_state();
     HTTP_CODE process_read();
     bool process_write(HTTP_CODE ret);
 
     HTTP_CODE parse_request_line(char* text);
     HTTP_CODE parse_headers(char* text);
-    HTTP_CODE parse_content(char* text);
-    
-    HTTP_CODE do_request(); // 【核心】分析请求的文件
+    HTTP_CODE parse_content(char* text); // 【修改】以前是空的，现在要写真逻辑了
+    HTTP_CODE do_request();
     
     LINE_STATUS parse_line();
-    void unmap(); // 【核心】解除内存映射
+    void unmap();
     
-    // 【新增】辅助函数：往写缓冲里填数据
     bool add_response(const char* format, ...);
     bool add_content(const char* content);
     bool add_status_line(int status, const char* title);

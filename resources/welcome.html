@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>TinyWebServer Login</title>
+    <style>
+        body { background-color: #2c3e50; font-family: 'Arial', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white;}
+        .card { background-color: #34495e; padding: 40px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; width: 300px; }
+        h1 { margin-bottom: 30px; color: #ecf0f1; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; transition: 0.3s; }
+        .btn-login { background-color: #27ae60; color: white; }
+        .btn-login:hover { background-color: #2ecc71; }
+        .btn-reg { background-color: #2980b9; color: white; }
+        .btn-reg:hover { background-color: #3498db; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔐 欢迎回来</h1>
+        <form action="1" method="post">
+            <input type="text" name="user" placeholder="用户名" required>
+            <input type="password" name="password" placeholder="密码" required>
+            <button type="submit" class="btn-login">登 录</button>
+        </form>
+        <br>
+        <form action="5" method="post">
+             <button type="submit" class="btn-reg">没有账号？去注册</button>
+        </form>
+    </div>
+</body>
+</html>

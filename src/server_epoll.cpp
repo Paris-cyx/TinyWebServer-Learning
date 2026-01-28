@@ -1,20 +1,34 @@
-#include <iostream>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
+#include <signal.h> 
 #include "ThreadPool.h"
-#include "http_conn.h" // 引入我们写好的 HTTP 类
-
-using namespace std;
+#include "http_conn.h" 
+#include "sql_conn_pool.h" 
+#include "log.h"  // 【新增】引入日志头文件
 
 const int MAX_EVENTS = 10000;
-const int MAX_FD = 65536; // 最大文件描述符数量
+const int MAX_FD = 65536; 
 
 int main() {
+    // 1. 初始化日志系统 (异步模式，队列长度800)
+    // 这里的 "ServerLog" 是日志文件名的前缀
+    Log::Instance()->init("ServerLog", 0, 2000, 800000, 800); 
+    
+    LOG_INFO("========== Server Start ==========");
+    LOG_INFO("Log System Init Success, Async Mode Enabled");
+
+    // 2. 忽略 SIGPIPE
+    signal(SIGPIPE, SIG_IGN); 
+
+    // 3. 初始化数据库连接池
+    SqlConnPool::Instance()->init("localhost", 3306, "tiny", "123456", "webserver", 8);
+    LOG_INFO("SQL Pool Init Success, Conn Size: %d", 8);
+
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    // 优雅关闭：允许端口复用
+    
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -24,34 +38,28 @@ int main() {
     server_addr.sin_port = htons(8080);
     
     if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
+        LOG_ERROR("Bind Error: %d", errno); // 【新增】记录错误日志
         return -1;
     }
-    listen(server_fd, 10000);
-
-    // 创建 epoll 对象
-    int epoll_fd = epoll_create1(0);
     
-    // 把 epoll_fd 传给 HttpConn 类 (静态成员，所有对象共享)
+    listen(server_fd, 10000); 
+
+    int epoll_fd = epoll_create1(0);
     HttpConn::m_epollfd = epoll_fd;
 
-    // 监听 server_fd
     struct epoll_event event;
     event.data.fd = server_fd;
     event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event);
-    setnonblocking(server_fd); // 监听 socket 也要非阻塞
-
-    // 创建线程池
-    ThreadPool pool(4);
     
-    // 预先为每个可能的客户端分配一个 HttpConn 对象
-    // 这样避免频繁 new/delete，直接用 fd 作为数组下标索引
-    HttpConn* users = new HttpConn[MAX_FD];
+    int old_option = fcntl(server_fd, F_GETFL);
+    fcntl(server_fd, F_SETFL, old_option | O_NONBLOCK);
 
+    ThreadPool pool(4); 
+    HttpConn* users = new HttpConn[MAX_FD];
     struct epoll_event events[MAX_EVENTS];
 
-    //cout << "=== TinyWebServer v1.0 启动成功 ===" << endl;
+    LOG_INFO("Server Init Finish, Listening on 8080...");
 
     while (true) {
         int n = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
@@ -59,40 +67,32 @@ int main() {
         for (int i = 0; i < n; i++) {
             int sockfd = events[i].data.fd;
 
-            // 1. 新连接到来
             if (sockfd == server_fd) {
                 struct sockaddr_in client_addr;
                 socklen_t client_len = sizeof(client_addr);
                 int connfd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
                 
                 if (connfd < 0) {
-                    cout << "Accept Error" << endl;
+                    LOG_ERROR("Accept Error: %d", errno);
                     continue;
                 }
                 if (HttpConn::m_user_count >= MAX_FD) {
-                    cout << "服务器正忙..." << endl;
+                    LOG_WARN("Server Busy, User Count: %d", HttpConn::m_user_count);
                     close(connfd);
                     continue;
                 }
-                
-                // 直接初始化这个用户的连接 (放入 epoll 监控都在这里面做了)
                 users[connfd].init(connfd, client_addr);
+                // LOG_INFO("New Client Connected, FD: %d", connfd); // 可选：记录新连接
             }
-            // 2. 读事件 (EPOLLIN)
             else if (events[i].events & EPOLLIN) {
-                // 一次性把数据读完
                 if (users[sockfd].read_once()) {
-                    // 读取成功，把“业务逻辑”扔给线程池
-                    // 这里的 Lambda 只需要传指针，非常快
                     pool.enqueue([&users, sockfd] {
                         users[sockfd].process();
                     });
                 } else {
-                    // 读失败（对方关闭连接），移除
                     users[sockfd].close_conn();
                 }
             }
-            // 3. 错误事件
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                 users[sockfd].close_conn();
             }
