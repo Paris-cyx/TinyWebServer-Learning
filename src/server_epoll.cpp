@@ -3,17 +3,17 @@
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
-#include <signal.h> 
+#include <signal.h>
 #include <assert.h>
 #include <errno.h>
 #include "ThreadPool.h"
-#include "http_conn.h" 
-#include "sql_conn_pool.h" 
+#include "http_conn.h"
+#include "sql_conn_pool.h"
 #include "log.h"
 #include "lst_timer.h" // 【新增】引入定时器头文件
 
 const int MAX_EVENTS = 10000;
-const int MAX_FD = 65536; 
+const int MAX_FD = 65536;
 const int TIMESLOT = 5; // 【定时器】最小超时单位：5秒
 
 static int pipefd[2];           // 【定时器】管道：0读，1写
@@ -49,14 +49,14 @@ void cb_func(client_data* user_data) {
 }
 
 int main() {
-    // 1. 初始化日志 (这里关掉了日志输出以提高性能，如果想看踢人过程，把第二个参数1改回0)
-    Log::Instance()->init("ServerLog", 0, 2000, 800000, 800); 
+    // 1. 初始化日志 (开启全量日志模式)
+    Log::Instance()->init("ServerLog", 0, 2000, 800000, 800);
     
     // 2. 初始化数据库
     SqlConnPool::Instance()->init("localhost", 3306, "tiny", "123456", "webserver", 8);
 
     // 3. 忽略 SIGPIPE
-    signal(SIGPIPE, SIG_IGN); 
+    signal(SIGPIPE, SIG_IGN);
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
@@ -68,11 +68,12 @@ int main() {
     server_addr.sin_port = htons(8080);
     
     bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    listen(server_fd, 10000); 
+    listen(server_fd, 10000);
 
     epoll_fd = epoll_create1(0);
     HttpConn::m_epollfd = epoll_fd;
 
+    // 这里直接调用全局的 addfd (已在 http_conn.h 声明，在 http_conn.cpp 定义)
     addfd(epoll_fd, server_fd, false);
     
     // 【定时器】创建管道
@@ -85,7 +86,7 @@ int main() {
     addsig(SIGTERM); // 终止信号
     alarm(TIMESLOT); // 开启闹钟：5秒后响第一次
 
-    ThreadPool pool(4); 
+    ThreadPool pool(4);
     users = new HttpConn[MAX_FD];
     client_data *users_timer = new client_data[MAX_FD]; // 存定时器数据
 
@@ -204,7 +205,6 @@ int main() {
         }
 
         // 【定时器】最后处理定时任务
-        // 为什么放在最后？因为 IO 事件优先级更高，定时任务晚个几毫秒没关系
         if (timeout) {
             timer_lst.tick(); // 巡逻链表，踢掉过期用户
             alarm(TIMESLOT);  // 重置闹钟，5秒后再响

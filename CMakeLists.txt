@@ -10,7 +10,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -Wall -pthread")
 # 包含头文件路径
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
-# 【重点修改这里】添加 src/log.cpp
+# 添加 src/log.cpp
 add_executable(server_core 
     src/server_epoll.cpp 
     src/http_conn.cpp 
