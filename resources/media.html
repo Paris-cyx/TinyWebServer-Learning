@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyWebServer 多媒体测试</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        p.subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+        .card h2 {
+            font-size: 1.2rem;
+            color: #34495e;
+            margin-top: 0;
+            border-bottom: 2px solid #3498db;
+            display: inline-block;
+            padding-bottom: 5px;
+        }
+        img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: #000;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: #2ecc71;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 10px;
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🚀 TinyWebServer</h1>
+        <p class="subtitle">静态资源加载 & MIME 类型测试</p>
+
+        <div class="card">
+            <h2>📸 图片加载测试 (Image)</h2>
+            <br>
+            <span class="status-badge">image/jpeg</span>
+            <div>
+                <img src="test.jpg" alt="如果你看到这段字，说明图片加载失败">
+            </div>
+            <p style="color: #666; font-size: 0.9rem; margin-top: 10px;">
+                如果你能看到上面的图片，说明服务器正确处理了 .jpg 后缀。
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>🎬 视频流测试 (Video)</h2>
+            <br>
+            <span class="status-badge">video/mp4</span>
+            <div>
+                <video src="video.mp4" controls preload="metadata">
+                    您的浏览器不支持 Video 标签，或者服务器未正确发送 MIME 类型。
+                </video>
+            </div>
+            <p style="color: #666; font-size: 0.9rem; margin-top: 10px;">
+                如果你能点击播放并拖动进度条，说明服务器支持大文件传输。
+            </p>
+        </div>
+
+        <a href="index.html" class="btn">返回首页</a>
+    </div>
+
+</body>
+</html>

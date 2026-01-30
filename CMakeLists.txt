@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 14)
 # 开启调试模式
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -Wall -pthread")
 
-# 包含头文件路径
+# 包含头文件路径cd 
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # 添加 src/log.cpp

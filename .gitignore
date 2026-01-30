@@ -11,3 +11,6 @@ bin/
 # 忽略 C++ 编译产生的临时文件
 *.o
 *.out
+
+perf.data
+perf.data.old

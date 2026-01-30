@@ -6,6 +6,7 @@ using namespace std;
 SqlConnPool::SqlConnPool() {
     m_use_count = 0;
     m_free_count = 0;
+    m_MAX_CONN = 0; // 【修复】补上这个漏网之鱼！
 }
 
 SqlConnPool* SqlConnPool::Instance() {
@@ -47,15 +48,17 @@ void SqlConnPool::init(const char* host, int port,
 MYSQL* SqlConnPool::GetConn() {
     MYSQL* sql = nullptr;
 
-    // 等待信号量（如果没有空闲连接，这里会阻塞等待，直到有人归还）
+    // 等待信号量
     sem_wait(&m_sem);
     
     // 上锁操作链表
     {
         lock_guard<mutex> locker(m_mtx);
-        sql = connList.front();
-        connList.pop_front();
-    } // 出作用域自动解锁
+        if (!connList.empty()) {
+            sql = connList.front();
+            connList.pop_front();
+        }
+    }
 
     return sql;
 }
@@ -68,7 +71,7 @@ void SqlConnPool::FreeConn(MYSQL* conn) {
         connList.push_back(conn);
     }
     
-    // 信号量 +1，通知其他等待的线程有连接可用了
+    // 信号量 +1
     sem_post(&m_sem);
 }
 
@@ -87,6 +90,7 @@ int SqlConnPool::GetFreeConnCount() {
 
 SqlConnPool::~SqlConnPool() {
     ClosePool();
+    sem_destroy(&m_sem); // 【优化】顺手把信号量也销毁掉，更严谨
 }
 
 // ================= RAII 实现 =================
