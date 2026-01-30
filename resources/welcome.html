@@ -4,73 +4,69 @@
     <meta charset="UTF-8">
     <title>TinyWebServer - 个人中心</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-align: center;
-            width: 350px;
-        }
-        h1 { color: #333; }
-        p { color: #666; margin-bottom: 30px; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9; padding: 20px; display: flex; justify-content: center; }
+        .container { max-width: 800px; width: 100%; }
+        .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h3 { margin-top: 0; color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px;}
         
-        /* 上传区域样式 */
-        .upload-box {
-            border: 2px dashed #ccc;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            transition: border-color 0.3s;
-        }
-        .upload-box:hover {
-            border-color: #007bff;
-        }
-        input[type="file"] {
-            margin-bottom: 15px;
-            width: 100%;
-        }
-        button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            width: 100%;
-            font-size: 16px;
-            transition: background 0.3s;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
+        /* 上传按钮样式 */
+        .upload-btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        .upload-btn:hover { background: #0056b3; }
+        
+        /* 资源列表样式 */
+        .file-list { list-style: none; padding: 0; }
+        .file-list li { padding: 10px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+        .file-list a { text-decoration: none; color: #007bff; }
+        
+        .preview-box img { max-width: 100%; border-radius: 4px; margin-top: 10px; }
     </style>
 </head>
 <body>
-
     <div class="container">
-        <h1>🎉 登录成功</h1>
-        <p>欢迎回到 TinyWebServer！</p>
-
-        <div class="upload-box">
-            <h3>上传头像测试</h3>
-            <form action="/" method="POST" enctype="multipart/form-data">
-                <input type="file" name="file" required>
-                <button type="submit">立即上传</button>
-            </form>
+        <div class="header">
+            <h1>👋 欢迎回来, Admin</h1>
+            <a href="/index.html" style="color: red; text-decoration: none;">退出登录</a>
         </div>
 
-        <p style="font-size: 12px; color: #999;">上传成功后页面将自动刷新</p>
-    </div>
+        <div class="grid">
+            <div class="card">
+                <h3>📤 上传头像</h3>
+                <p style="font-size: 13px; color: #666;">支持 jpg/png 格式，后端将自动解析 Multipart 协议</p>
+                <form action="/" method="POST" enctype="multipart/form-data">
+                    <input type="file" name="file" required style="margin-bottom: 10px;">
+                    <br>
+                    <button type="submit" class="upload-btn">上传文件</button>
+                </form>
+            </div>
 
+            <div class="card">
+                <h3>📂 资源下载/查看</h3>
+                <ul class="file-list">
+                    <li>
+                        <span>📑 压力测试报告图</span>
+                        <a href="/stress_test.png" target="_blank">查看</a>
+                    </li>
+                    <li>
+                        <span>🎬 演示视频 (mp4)</span>
+                        <a href="/video.mp4" target="_blank">播放</a>
+                    </li>
+                    <li>
+                        <span>🖼️ 测试图片 (jpg)</span>
+                        <a href="/test.jpg" target="_blank">预览</a>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="card" style="grid-column: span 2;">
+                <h3>🖼️ 最近上传预览</h3>
+                <div class="preview-box">
+                    <p>如果上传成功，文件通常保存为 `upload_文件名.jpg`。</p>
+                    <p>尝试访问刚才上传的文件：<a href="/upload_test.jpg" target="_blank">点击查看 /upload_头像.jpg</a> 
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

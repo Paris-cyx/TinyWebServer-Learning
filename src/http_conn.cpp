@@ -332,7 +332,7 @@ HttpConn::HTTP_CODE HttpConn::parse_multipart_content(char* text) {
     // 假设保存到当前运行目录，或者你可以指定 resources/ 目录
     char file_path[256];
     // 这里为了演示方便，直接存到 server_core 同级目录下，文件名前加 upload_ 前缀
-    snprintf(file_path, 256, "upload_%s", m_upload_filename);
+    snprintf(file_path, 256, "resources/upload_%s", m_upload_filename);
 
     FILE* fp = fopen(file_path, "wb"); // wb: 二进制写入模式
     if (!fp) {
@@ -463,6 +463,7 @@ HttpConn::HTTP_CODE HttpConn::do_request() {
                 // 必须设置 Cookie 状态
                 m_set_cookie = 1;
                 m_cookie_is_login = true; 
+                LOG_INFO("Login Success: %s", name);
             } else {
                 // 【修改点 E】登录失败
                 m_json_string = (char*)"{\"code\": 401, \"msg\": \"Login Failed\"}";
@@ -556,6 +557,11 @@ bool HttpConn::add_response(const char* format, ...) {
     return true;
 }
 
+bool HttpConn::add_content(const char* content) {
+    // 调用你现有的 add_response，把内容格式化进去
+    return add_response("%s", content);
+}
+
 bool HttpConn::add_status_line(int status, const char* title) {
     return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
 }
@@ -579,9 +585,31 @@ bool HttpConn::add_content_length(int content_len) {
     return add_response("Content-Length: %d\r\n", content_len);
 }
 bool HttpConn::add_content_type() {
-    const char* type = get_mime_type(m_real_file);
-    return add_response("Content-Type: %s\r\n", type);
+    // 1. 如果是 API 请求，返回 JSON
+    if (m_is_json) {
+        return add_response("Content-Type:%s\r\n", "application/json;charset=utf-8");
+    }
+
+    // 2. 如果是文件请求，根据后缀名判断类型
+    // 获取文件名后缀 (比如 .jpg)
+    const char* suffix = strrchr(m_url, '.');
+    
+    if (suffix != nullptr) {
+        if (strcasecmp(suffix, ".html") == 0) return add_response("Content-Type:%s\r\n", "text/html");
+        if (strcasecmp(suffix, ".css")  == 0) return add_response("Content-Type:%s\r\n", "text/css");
+        if (strcasecmp(suffix, ".js")   == 0) return add_response("Content-Type:%s\r\n", "text/javascript");
+        if (strcasecmp(suffix, ".jpg")  == 0 || strcasecmp(suffix, ".jpeg") == 0) 
+            return add_response("Content-Type:%s\r\n", "image/jpeg");
+        if (strcasecmp(suffix, ".png")  == 0) return add_response("Content-Type:%s\r\n", "image/png");
+        if (strcasecmp(suffix, ".gif")  == 0) return add_response("Content-Type:%s\r\n", "image/gif");
+        if (strcasecmp(suffix, ".mp4")  == 0) return add_response("Content-Type:%s\r\n", "video/mp4");
+        // 如果想支持更多格式，可以在这里继续加
+    }
+
+    // 3. 默认兜底：依然是 HTML (或者用 text/plain)
+    return add_response("Content-Type:%s\r\n", "text/html");
 }
+
 bool HttpConn::add_blank_line() {
     return add_response("\r\n");
 }
@@ -590,25 +618,71 @@ bool HttpConn::process_write(HTTP_CODE ret) {
     switch (ret) {
         case INTERNAL_ERROR:
             add_status_line(500, "Internal Server Error");
+            // 原版这里可能没加 content，直接返回空 body 也是可以的
             break;
+            
         case NO_RESOURCE:
             add_status_line(404, "Not Found");
             break;
+            
         case FORBIDDEN_REQUEST:
             add_status_line(403, "Forbidden");
             break;
+
+        // ======================================================
+        // 【新增】 处理 API 请求 (JSON) 或 普通文本请求
+        // 对应 do_request 中返回的 GET_REQUEST
+        // ======================================================
+        case GET_REQUEST:
+            add_status_line(200, "OK");
+            
+            // 1. 如果是 JSON 模式 (我们在 do_request 里标记的)
+            if (m_is_json && m_json_string) {
+                // 添加头部 (Content-Length 等)
+                // 注意：这里会调用 add_content_type，记得去第一步把那里改好
+                if (!add_headers(strlen(m_json_string))) {
+                    return false;
+                }
+                // 把 JSON 字符串拷贝到写缓冲区 m_write_buf
+                if (!add_content(m_json_string)) {
+                    return false;
+                }
+            } 
+            // 2. 默认保底逻辑 (如果不是 JSON，发个空页面)
+            else {
+                const char* ok_string = "<html><body></body></html>";
+                add_headers(strlen(ok_string));
+                if (!add_content(ok_string)) return false;
+            }
+            break;
+
+        // ======================================================
+        // 处理静态文件 (保持原样)
+        // ======================================================
         case FILE_REQUEST:
             add_status_line(200, "OK");
-            add_headers(m_file_stat.st_size);
-            m_iv[0].iov_base = m_write_buf;
-            m_iv[0].iov_len = m_write_idx;
-            m_iv[1].iov_base = m_file_address; 
-            m_iv[1].iov_len = m_file_stat.st_size;
-            m_iv_count = 2;
-            return true;
+            if (m_file_stat.st_size != 0) {
+                add_headers(m_file_stat.st_size);
+                
+                // 核心差异：文件传输需要两块内存 (头 + 文件)
+                m_iv[0].iov_base = m_write_buf;
+                m_iv[0].iov_len = m_write_idx;
+                m_iv[1].iov_base = m_file_address; 
+                m_iv[1].iov_len = m_file_stat.st_size;
+                m_iv_count = 2;
+                return true;
+            } else {
+                const char* ok_string = "<html><body></body></html>";
+                add_headers(strlen(ok_string));
+                if (!add_content(ok_string)) return false;
+            }
+            
         default:
             return false;
     }
+
+    // 对于非 FILE_REQUEST 的情况 (比如刚才的 JSON，或者错误码)
+    // 我们只需要发送 m_write_buf 这一块内存
     m_iv[0].iov_base = m_write_buf;
     m_iv[0].iov_len = m_write_idx;
     m_iv_count = 1;
