@@ -50,7 +50,7 @@ void cb_func(client_data* user_data) {
 
 int main() {
     // 1. 初始化日志 (开启全量日志模式)
-    Log::Instance()->init("ServerLog", 0, 2000, 800000, 800);
+    Log::Instance()->init("./log/ServerLog", 0, 2000, 800000, 800);
     
     // 2. 初始化数据库
     SqlConnPool::Instance()->init("localhost", 3306, "tiny", "123456", "webserver", 8);
