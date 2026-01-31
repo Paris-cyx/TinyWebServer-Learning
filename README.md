@@ -12,6 +12,7 @@
 虽然源码目录保持扁平化结构 (`src/`)，但逻辑上系统被划分为清晰的五层架构：
 
 ![Architecture Diagram](resources/architecture.png)
+*(注：架构图位于 resources/architecture.png)*
 
 * **Reactor 驱动层 (`server_epoll.cpp`)**: 作为服务器的“心脏”，主线程运行 Epoll 事件循环，负责监听 socket 连接请求与 IO 事件。
 * **并发处理层 (`ThreadPool.h`)**: 采用半同步/半反应堆模式。主线程将 IO 就绪的任务分发给线程池，工作线程负责业务逻辑计算。
@@ -19,6 +20,17 @@
 * **基础设施层**:
     * **异步日志 (`log.cpp`)**: 采用“生产者-消费者”模型，将磁盘写入从主业务线程剥离。
     * **数据库连接池 (`sql_conn_pool.cpp`)**: 复用 MySQL 连接，避免频繁握手开销。
+
+---
+
+## 🧪 学习演进 (Evolution & Demos)
+本项目并非一蹴而就，而是遵循了从简单到复杂的演进路线。`demos/` 目录下记录了架构演进的关键里程碑：
+
+* **`01_single_reactor.cpp`**: **单 Reactor 单线程模型**。最基础的版本，用于理解 Epoll 事件循环核心原理。
+* **`02_multithread_reactor.cpp`**: **单 Reactor 多线程模型**。引入线程池处理业务逻辑，解决了单线程下的计算瓶颈。
+* **`03_epoll_single.cpp`**: **基础 Epoll 回显服务**。展示了原生 Linux Epoll API 的使用细节。
+
+*这些 Demo 见证了项目从基础 Socket 编程到高性能 Reactor 架构的完整蜕变过程。*
 
 ---
 
@@ -50,7 +62,7 @@
 
 **测试环境**：Ubuntu Linux (资源受限环境)
 **测试工具**：WebBench 1.5
-**测试配置**：并发连接数 **10,000**，测试时长 **30s**。
+**测试配置**：并发连接数 **10,000**，测试时长 **5s**。
 
 **测试结果**：
 * **QPS**: 10,000+
@@ -145,6 +157,7 @@ mkdir log
 ├── log/                 # [自动生成] 运行日志 (按日期归档)
 ├── profile_data/        # [性能证据] 火焰图与 perf 分析数据
 ├── resources/           # [静态资源] HTML页面、图片、架构图
+├── demos/               # [学习演进] Reactor 模型的早期迭代版本
 ├── src/                 # 核心源码
 │   ├── server_epoll.cpp # [Main] 程序入口，Epoll 事件循环
 │   ├── http_conn.cpp    # [HTTP] 状态机与响应生成
