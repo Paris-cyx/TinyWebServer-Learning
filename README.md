@@ -12,7 +12,6 @@
 虽然源码目录保持扁平化结构 (`src/`)，但逻辑上系统被划分为清晰的五层架构：
 
 ![Architecture Diagram](resources/architecture.png)
-*(注：架构图位于 resources/architecture.png)*
 
 * **Reactor 驱动层 (`server_epoll.cpp`)**: 作为服务器的“心脏”，主线程运行 Epoll 事件循环，负责监听 socket 连接请求与 IO 事件。
 * **并发处理层 (`ThreadPool.h`)**: 采用半同步/半反应堆模式。主线程将 IO 就绪的任务分发给线程池，工作线程负责业务逻辑计算。
