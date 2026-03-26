@@ -167,5 +167,16 @@ mkdir log
 └── CMakeLists.txt       # 构建脚本
 ```
 
+## 🔬 请求端到端链路分析 (Request Lifecycle)
+
+想深入理解"一个 HTTP GET 请求是如何从 `main()` 到达 `200 OK` 的"？
+
+📄 **[HTTP_REQUEST_LIFECYCLE.md](./HTTP_REQUEST_LIFECYCLE.md)** — 完整的端到端源码追踪文档，包含：
+- ⏱️ 按时间顺序排列的每一步，标注 **C++ 类、方法、文件名**
+- 🐧 所有 Linux 系统调用（`socket`、`bind`、`listen`、`epoll_create1`、`epoll_wait`、`accept`、`recv`、`writev`）的**精确文件名和行号**
+- 🔀 **主线程与工作线程交接点**的详细说明和流程图
+
+---
+
 ## 📜 Acknowledgements
 * 感谢 [qinguoyi/TinyWebServer](https://github.com/qinguoyi/TinyWebServer) 提供的优秀基础框架。本项目在此基础上进行了重构与性能实验。
