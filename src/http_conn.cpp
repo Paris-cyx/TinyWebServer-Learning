@@ -37,10 +37,14 @@ void setnonblocking(int fd) {
 void addfd(int epollfd, int fd, bool one_shot) {
     epoll_event event;
     event.data.fd = fd;
+    // EPOLLET：边沿触发模式，数据就绪时只通知一次，必须一次性读完（否则丢事件）
+    // EPOLLONESHOT：保证同一 fd 在同一时刻只被一个工作线程处理，避免数据竞争
+    //   注意：每次 epoll_wait 触发 EPOLLONESHOT 事件后，该 fd 会自动从 epoll 中"单次注册"
+    //   失效，必须通过 modfd（即 epoll_ctl EPOLL_CTL_MOD）重新注册才能继续监听下一次事件
     event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
     if(one_shot) event.events |= EPOLLONESHOT;
-    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-    setnonblocking(fd);
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event); // 将 fd 注册到 epoll
+    setnonblocking(fd); // 配合 ET 模式必须非阻塞，否则 recv 读完后会一直阻塞
 }
 
 void removefd(int epollfd, int fd) {
@@ -80,9 +84,10 @@ void HttpConn::init(int sockfd, const sockaddr_in& addr) {
     m_address = addr;
     int reuse = 1;
     setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    // 将新连接加入 epoll，并设为非阻塞；EPOLLONESHOT 确保同一连接不会被多个线程并发处理
     addfd(m_epollfd, sockfd, true); 
     m_user_count++;
-    init_parse_state();
+    init_parse_state(); // 重置 HTTP 状态机，准备解析下一个请求
 }
 
 void HttpConn::init_parse_state() {
@@ -128,15 +133,19 @@ void HttpConn::close_conn() {
     }
 }
 
+// read_once：在主线程中被调用（epoll_wait 返回 EPOLLIN 事件后）
+// ET 边沿触发要求：必须循环 recv 直到 EAGAIN，把内核缓冲区中的数据一次性读完
+// 数据存入 m_read_buf，后续由工作线程（HttpConn::process）解析
 bool HttpConn::read_once() {
     if(m_read_idx >= sizeof(m_read_buf)) return false;
     int bytes_read = 0;
     while(true) {
+        // recv：非阻塞读取，数据追加到 m_read_buf 尾部
         bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, sizeof(m_read_buf) - m_read_idx, 0);
         if(bytes_read == -1) {
-            if(errno == EAGAIN || errno == EWOULDBLOCK) break;
-            return false;
-        } else if(bytes_read == 0) return false;
+            if(errno == EAGAIN || errno == EWOULDBLOCK) break; // 缓冲区已空，本次读取完毕
+            return false; // 其他错误
+        } else if(bytes_read == 0) return false; // 对端关闭连接（收到 FIN）
         m_read_idx += bytes_read;
     }
     return true;
@@ -490,9 +499,11 @@ HttpConn::HTTP_CODE HttpConn::do_request() {
     if (!(m_file_stat.st_mode & S_IROTH)) return FORBIDDEN_REQUEST;
     if (S_ISDIR(m_file_stat.st_mode)) return BAD_REQUEST;
     
-    int fd = open(m_real_file, O_RDONLY);
+    int fd = open(m_real_file, O_RDONLY);         // 只读打开文件，获取 fd
     m_file_address = (char*)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    close(fd);
+    // mmap：将文件内容直接映射到进程地址空间（零拷贝）
+    // 后续 writev 直接从 mmap 区域发送，避免了 read→用户缓冲区→write 的双重拷贝
+    close(fd); // mmap 建立后 fd 即可关闭，映射区依然有效
     
     return FILE_REQUEST;
 }
@@ -504,38 +515,47 @@ void HttpConn::unmap() {
     }
 }
 
+// write：在主线程中被调用（epoll_wait 返回 EPOLLOUT 事件后）
+// 使用 writev 分散写，一次系统调用同时发送：
+//   m_iv[0] = HTTP 响应头（在 m_write_buf 中）
+//   m_iv[1] = mmap 映射的文件内容（对于静态文件请求）
+// 这避免了两次 write 调用和额外的内存拷贝，是本项目高 QPS 的关键优化之一
 bool HttpConn::write() {
     int temp = 0;
     int bytes_have_send = 0;
     int bytes_to_send = m_write_idx + m_file_stat.st_size; 
 
     if (bytes_to_send == 0) {
-        modfd(m_epollfd, m_sockfd, EPOLLIN);
+        modfd(m_epollfd, m_sockfd, EPOLLIN); // 无数据可发，切回监听读事件
         init_parse_state();
         return true;
     }
 
     while (1) {
+        // writev：分散写，原子性地将 m_iv 数组描述的多块内存一次发出
         temp = writev(m_sockfd, m_iv, m_iv_count);
         if (temp <= -1) {
             if (errno == EAGAIN) {
+                // 内核发送缓冲区已满，注册 EPOLLOUT 等待下次可写，继续发
                 modfd(m_epollfd, m_sockfd, EPOLLOUT);
                 return true;
             }
-            unmap();
+            unmap(); // 出错，释放 mmap
             return false;
         }
         bytes_to_send -= temp;
         bytes_have_send += temp;
         
         if (bytes_to_send <= 0) {
-            unmap();
-            modfd(m_epollfd, m_sockfd, EPOLLIN); 
+            // 全部数据发送完毕
+            unmap(); // munmap 释放内存映射
+            modfd(m_epollfd, m_sockfd, EPOLLIN); // 切回监听读事件
             if (m_linger) { 
+                // keep-alive：重置状态机，复用连接等待下一个请求
                 init_parse_state();
                 return true;
             } else {
-                return false;
+                return false; // 短连接：通知调用方关闭连接
             }
         }
     }
@@ -689,15 +709,23 @@ bool HttpConn::process_write(HTTP_CODE ret) {
     return true;
 }
 
+// process：工作线程的入口函数，由 ThreadPool 中的 worker 线程执行
+// 调用链：pool.enqueue(lambda) → condition.notify_one() → 工作线程唤醒 → process()
+// 职责：驱动 HTTP 状态机完成解析，构建响应，并通过 modfd 触发 EPOLLOUT 让主线程发送
 void HttpConn::process() {
+    // 1. 驱动有限状态机解析 HTTP 请求（请求行 → 头部 → 正文）
     HTTP_CODE read_ret = process_read();
     if (read_ret == NO_REQUEST) {
+        // 请求数据不完整，重新注册 EPOLLIN 等待更多数据
         modfd(m_epollfd, m_sockfd, EPOLLIN);
         return;
     }
+    // 2. 根据解析结果构建 HTTP 响应（填充 m_write_buf，设置 iovec）
     bool write_ret = process_write(read_ret);
     if (!write_ret) {
         close_conn();
     }
+    // 3. 将 fd 的监听事件从 EPOLLIN 切换为 EPOLLOUT
+    //    主线程下次 epoll_wait 返回后，将调用 HttpConn::write() 发送响应
     modfd(m_epollfd, m_sockfd, EPOLLOUT); 
 }

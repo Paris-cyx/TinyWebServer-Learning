@@ -20,6 +20,8 @@
     * **异步日志 (`log.cpp`)**: 采用“生产者-消费者”模型，将磁盘写入从主业务线程剥离。
     * **数据库连接池 (`sql_conn_pool.cpp`)**: 复用 MySQL 连接，避免频繁握手开销。
 
+> 📖 **深度阅读**：想了解从 `main` 函数启动到线程池运转的完整调用链路？请阅读 [docs/reactor-call-chain.md](docs/reactor-call-chain.md)，其中精确列出了每个阶段经过的 C++ 类、核心函数与底层系统调用（`socket`/`bind`/`listen`/`epoll_create1`/`epoll_ctl`/`epoll_wait`/`accept`/`recv`/`mmap`/`writev` 等）。
+
 ---
 
 ## 🧪 学习演进 (Evolution & Demos)
