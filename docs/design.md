@@ -42,7 +42,7 @@ erDiagram
 
 > 来源：`README.md` 中的 Database Setup。
 
-| 字段名 | 类型 | 允许为空 | 建议约束/索引 | 说明 | 代码/位置 |
+| 字段名 | 类型 | 允许为空 | 建议约束/索�� | 说明 | 代码/位置 |
 |---|---|---:|---|---|---|
 | username | char(50) | 是（README） | **建议：NOT NULL + UNIQUE** | 用户名（业务主键） | `HttpConn::initmysql_result()`、注册 INSERT、登录校验 |
 | passwd | char(50) | 是（README） | 建议：NOT NULL | 密码（当前明文，仅学习） | 同上 |
@@ -172,21 +172,21 @@ flowchart TB
 ```mermaid
 sequenceDiagram
   participant C as Client
-  participant E as EpollLoop(main)
-  participant T as ThreadPool(worker)
+  participant E as EpollLoop_main
+  participant T as ThreadPool_worker
   participant H as HttpConn
-  participant FS as FileSystem(resources)
+  participant FS as FileSystem_resources
 
-  C->>E: TCP connect + send GET /index.html
-  E->>H: accept(); HttpConn::init()
-  E->>T: EPOLLIN -> enqueue(HttpConn::process)
-  T->>H: process_read() 解析请求行/头
-  H->>H: do_request() 若/welcome.html且无cookie则改/logError.html
-  H->>FS: stat/open/mmap
-  H->>H: process_write(FILE_REQUEST)
-  H->>E: modfd(EPOLLOUT)
-  E->>H: EPOLLOUT
-  H->>C: writev() 发送响应
+  C->>E: connect and send GET /index.html
+  E->>H: accept connection and init HttpConn
+  E->>T: enqueue task when EPOLLIN ready
+  T->>H: process_read parse request
+  H->>H: do_request auth check for protected pages
+  H->>FS: stat open mmap
+  H->>H: process_write for FILE_REQUEST
+  H->>E: modfd set EPOLLOUT
+  E->>H: EPOLLOUT event
+  H->>C: writev send response
 ```
 
 #### 2.4.2 注册/登录（POST /3、POST /2，JSON + Cookie）
@@ -205,7 +205,7 @@ sequenceDiagram
   H->>H: do_request() 识别 /2 /3 => m_is_json=true
 
   alt 注册 /3
-    H->>P: RAII 获取 MYSQL* 并��行 INSERT
+    H->>P: RAII 获取 MYSQL* 并执行 INSERT
     H->>H: 生成 m_json_string(code=200/400/500)
   else 登录 /2
     H->>H: 校验 users[name]==password
@@ -225,25 +225,68 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant C as Client
-  participant T as ThreadPool(worker)
+  participant T as ThreadPool_worker
   participant H as HttpConn
   participant FS as FileSystem
 
-  C->>T: POST (multipart/form-data; boundary=...)
-  T->>H: parse_headers() 识别 multipart 并记录 boundary
-  T->>H: parse_content() -> parse_multipart_content()
-  H->>H: 提取 filename + 定位 data_start/data_end
-  H->>FS: fopen("resources/upload_<name>","wb") + fwrite
-  H->>H: 上传成功后 m_url="/welcome.html"
+  C->>T: send POST multipart form data
+  T->>H: parse_headers detect multipart and boundary
+  T->>H: parse_content then parse_multipart_content
+  H->>H: extract filename and locate binary range
+  H->>FS: write file into resources directory
+  H->>H: set url to /welcome.html
 ```
 
 ---
 
-## 3. 测试用例（与当前项目实现一致）
+## 3. 主要功能流程图
+
+> 该流程图聚合 `server_epoll.cpp` 的主循环和 `HttpConn::process()` 的核心处理逻辑。
+
+```mermaid
+flowchart TD
+  S[Server start] --> L[init Log]
+  L --> DB[init SqlConnPool]
+  DB --> SOCK[create listen socket]
+  SOCK --> EP[create epoll and add listen fd]
+  EP --> PIPE[socketpair + add pipe read fd]
+  PIPE --> SIG[register signals + alarm TIMESLOT]
+  SIG --> POOL[create ThreadPool]
+  POOL --> LOAD[load users from DB]
+  LOAD --> LOOP{epoll_wait}
+
+  LOOP -->|listen fd| ACC[accept new connection]
+  ACC --> INIT[HttpConn.init and add timer]
+  INIT --> LOOP
+
+  LOOP -->|pipe fd readable| SIGEV[handle SIGALRM or SIGINT]
+  SIGEV -->|SIGALRM| TICK[timer_heap.tick]
+  TICK --> LOOP
+  SIGEV -->|SIGINT/SIGTERM| STOP[stop_server true]
+
+  LOOP -->|EPOLLIN| READ[read_once]
+  READ -->|ok| ENQ[adjust timer and enqueue HttpConn.process]
+  READ -->|fail| CLOSE1[del timer and close conn]
+  ENQ --> LOOP
+  CLOSE1 --> LOOP
+
+  LOOP -->|EPOLLOUT| WRITE[HttpConn.write]
+  WRITE -->|ok| ADJ[adjust timer]
+  WRITE -->|fail| CLOSE2[del timer and close conn]
+  ADJ --> LOOP
+  CLOSE2 --> LOOP
+
+  STOP --> CLEAN[cleanup fds and delete arrays]
+  CLEAN --> END[Server exit]
+```
+
+---
+
+## 4. 测试用例（与当前项目实现一致）
 
 > 推荐工具：浏览器 + `curl` + `webbench`。
 
-### 3.1 静态资源
+### 4.1 静态资源
 
 | 用例ID | 场景 | 请求 | 期望结果 |
 |---|---|---|---|
@@ -253,7 +296,7 @@ sequenceDiagram
 | TC-GET-04 | 资源不存在 | `GET /no_such_file.html` | 返回 404（NO_RESOURCE） |
 | TC-GET-05 | 大文件 | `GET /video.mp4` | 可正常播放/下载（mmap + writev） |
 
-### 3.2 注册/登录（JSON）
+### 4.2 注册/登录（JSON）
 
 | 用例ID | 场景 | 请求 | 期望结果 |
 |---|---|---|---|
@@ -262,14 +305,14 @@ sequenceDiagram
 | TC-AUTH-03 | 登录成功 | `POST /2` 正确账号 | JSON：code=200；响应头含 `Set-Cookie: is_login=true` |
 | TC-AUTH-04 | 登录失败 | `POST /2` 密码错误 | JSON：code=401 |
 
-### 3.3 文件上传（multipart）
+### 4.3 文件上传（multipart）
 
 | 用例ID | 场景 | 请求 | 期望结果 |
 |---|---|---|---|
 | TC-UP-01 | 上传图片 | multipart/form-data 上传 `a.jpg` | 生成 `resources/upload_a.jpg`（或同名前缀） |
 | TC-UP-02 | boundary 缺失 | multipart 但无 boundary/filename | 解析失败，返回 BAD_REQUEST/500（取决于失败点） |
 
-### 3.4 并发与稳定性
+### 4.4 并发与稳定性
 
 | 用例ID | 场景 | 操作 | 期望结果 |
 |---|---|---|---|
