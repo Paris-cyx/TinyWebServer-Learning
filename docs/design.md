@@ -94,94 +94,31 @@ flowchart LR
 
 ### 2.2 UML 类图（Class Diagram）
 
-> 仅画当前项目真实存在并被主流程使用的核心类/结构体。
+> 说明：VSCode 的 Markdown Mermaid 预览对 `classDiagram` 支持经常不完整，容易出现“不渲染/报错”。
+> 因此这里使用 **flowchart 绘制 UML 类图外观**（类名/属性/方法/关系均保持 UML 语义），保证在 VSCode 中稳定渲染。
 
 ```mermaid
-classDiagram
-class ThreadPool{
-  -vector~thread~ workers
-  -queue~function<void()>~ tasks
-  -mutex queue_mutex
-  -condition_variable condition
-  -bool stop
-  +ThreadPool(size_t)
-  +~ThreadPool()
-  +enqueue(F)
-}
+flowchart TB
 
-class HttpConn{
-  +static int m_epollfd
-  +static int m_user_count
-  +init(int, sockaddr_in)
-  +close_conn()
-  +read_once() bool
-  +write() bool
-  +process()
-  +initmysql_result(SqlConnPool*)
-  -process_read() HTTP_CODE
-  -process_write(HTTP_CODE) bool
-  -parse_request_line(char*) HTTP_CODE
-  -parse_headers(char*) HTTP_CODE
-  -parse_content(char*) HTTP_CODE
-  -parse_multipart_content(char*) HTTP_CODE
-  -do_request() HTTP_CODE
-  -add_response(...)
-  -add_headers(int)
-}
+ThreadPool["**ThreadPool**\n----------------------\n- workers\n- tasks\n- queue_mutex\n- condition\n- stop\n----------------------\n+ ThreadPool(threads)\n+ ~ThreadPool()\n+ enqueue(task)"]
 
-class SqlConnPool{
-  <<singleton>>
-  -list~MYSQL*~ connList
-  -sem_t m_sem
-  -mutex m_mtx
-  -int m_MAX_CONN
-  +static Instance() SqlConnPool*
-  +init(host,port,user,pwd,db,connSize)
-  +GetConn() MYSQL*
-  +FreeConn(MYSQL*)
-  +ClosePool()
-}
+HttpConn["**HttpConn**\n----------------------\n+ m_epollfd : static\n+ m_user_count : static\n----------------------\n+ init(sockfd, addr)\n+ close_conn()\n+ read_once() : bool\n+ write() : bool\n+ process()\n+ initmysql_result(connPool)\n----------------------\n- process_read()\n- process_write(ret)\n- parse_request_line(text)\n- parse_headers(text)\n- parse_content(text)\n- parse_multipart_content(text)\n- do_request()\n- add_response(...)\n- add_headers(content_length)"]
 
-class SqlConnRAII{
-  -MYSQL* sqlRAII
-  -SqlConnPool* poolRAII
-  +SqlConnRAII(MYSQL**, SqlConnPool*)
-  +~SqlConnRAII()
-}
+SqlConnPool["**SqlConnPool** <<singleton>>\n----------------------\n- connList\n- sem\n- mtx\n- MAX_CONN\n----------------------\n+ Instance()\n+ init(host, port, user, pwd, dbName, connSize)\n+ GetConn()\n+ FreeConn(conn)\n+ ClosePool()"]
 
-class Log{
-  <<singleton>>
-  +static Instance() Log*
-  +init(file, close_log, ...)
-  +write_log(level, fmt, ...)
-  +flush()
-}
+SqlConnRAII["**SqlConnRAII**\n----------------------\n- sql\n- pool\n----------------------\n+ SqlConnRAII(sqlPtr, pool)\n+ ~SqlConnRAII()"]
 
-class client_data{
-  +sockaddr_in address
-  +int sockfd
-  +util_timer* timer
-}
+Log["**Log** <<singleton>>\n----------------------\n+ Instance()\n+ init(file_name, close_log, ...)\n+ write_log(level, format, ...)\n+ flush()"]
 
-class util_timer{
-  +time_t expire
-  +void (*cb_func)(client_data*)
-  +client_data* user_data
-}
+client_data["**client_data** <<struct>>\n----------------------\n+ address\n+ sockfd\n+ timer"]
 
-class time_heap{
-  -util_timer** array
-  -int capacity
-  -int cur_size
-  +add_timer(util_timer*)
-  +del_timer(util_timer*)
-  +adjust_timer(util_timer*)
-  +tick()
-}
+util_timer["**util_timer**\n----------------------\n+ expire\n+ cb_func\n+ user_data"]
 
-SqlConnPool --> SqlConnRAII : provides conn
-HttpConn --> SqlConnPool : uses DB
-HttpConn --> Log : writes log
+time_heap["**time_heap**\n----------------------\n- array\n- capacity\n- cur_size\n----------------------\n+ add_timer(timer)\n+ del_timer(timer)\n+ adjust_timer(timer)\n+ tick()"]
+
+SqlConnPool -->|provides| SqlConnRAII
+HttpConn -->|uses| SqlConnPool
+HttpConn -->|logs| Log
 util_timer --> client_data
 time_heap --> util_timer
 ```
@@ -268,7 +205,7 @@ sequenceDiagram
   H->>H: do_request() 识别 /2 /3 => m_is_json=true
 
   alt 注册 /3
-    H->>P: RAII 获取 MYSQL* 并执行 INSERT
+    H->>P: RAII 获取 MYSQL* 并��行 INSERT
     H->>H: 生成 m_json_string(code=200/400/500)
   else 登录 /2
     H->>H: 校验 users[name]==password
