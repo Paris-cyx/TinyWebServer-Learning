@@ -1,4 +1,4 @@
-# TinyWebServer-Learning 设计文档（与当前项目代码一致）
+# TinyWebServer-Learning 设计文档
 
 > 仓库：`Paris-cyx/TinyWebServer-Learning`（main 分支）
 >
@@ -16,9 +16,6 @@
 ## 1. 数据设计
 
 ### 1.1 E-R 图（数据库）
-
-> 当前项目真正落库的业务只有：用户注册/登录。
-> 文件上传仅保存到本地 `resources/` 目录，不入库，所以不在 E-R 图中体现。
 
 ```mermaid
 erDiagram
@@ -47,7 +44,6 @@ erDiagram
 | username | char(50) | 是（README） | **建议：NOT NULL + UNIQUE（主键/唯一键）** | 用户名（业务主键） | `HttpConn::initmysql_result()`、注册 INSERT、登录校验 |
 | passwd | char(50) | 是（README） | 建议：NOT NULL | 密码（当前明文，仅学习） | 同上 |
 
-> 备注：你当前实现没有做 SQL 注入防护；若要工程化可改为预编译语句，并将密码改为哈希。
 
 #### 1.2.2 关键内存数据结构（项目运行时数据）
 
@@ -93,9 +89,6 @@ flowchart LR
 ---
 
 ### 2.2 UML 类图（Class Diagram）
-
-> 说明：VSCode 的 Markdown Mermaid 预览对 `classDiagram` 支持经常不完整，容易出现“不渲染/报错”。
-> 因此这里使用 **flowchart 绘制 UML 类图外观**（类名/属性/方法/关系均保持 UML 语义），保证在 VSCode 中稳定渲染。
 
 ```mermaid
 flowchart TB
