@@ -23,8 +23,8 @@
 ```mermaid
 erDiagram
     USER {
-        char(50) username "用户名（业务上应唯一；README SQL 允许 NULL，但建议 NOT NULL + UNIQUE）"
-        char(50) passwd   "密码（当前明文存储，仅学习用途；生产应加盐哈希）"
+        char(50) username PK "用户名（业务上应唯一；建议 NOT NULL + UNIQUE）"
+        char(50) passwd       "密码（当前明文存储，仅学习用途；生产应加盐哈希）"
     }
 ```
 
@@ -42,9 +42,9 @@ erDiagram
 
 > 来源：`README.md` 中的 Database Setup。
 
-| 字段名 | 类型 | 允许为空 | 建议约束/索�� | 说明 | 代码/位置 |
+| 字段名 | 类型 | 允许为空 | 建议约束/索引 | 说明 | 代码/位置 |
 |---|---|---:|---|---|---|
-| username | char(50) | 是（README） | **建议：NOT NULL + UNIQUE** | 用户名（业务主键） | `HttpConn::initmysql_result()`、注册 INSERT、登录校验 |
+| username | char(50) | 是（README） | **建议：NOT NULL + UNIQUE（主键/唯一键）** | 用户名（业务主键） | `HttpConn::initmysql_result()`、注册 INSERT、登录校验 |
 | passwd | char(50) | 是（README） | 建议：NOT NULL | 密码（当前明文，仅学习） | 同上 |
 
 > 备注：你当前实现没有做 SQL 注入防护；若要工程化可改为预编译语句，并将密码改为哈希。
@@ -301,7 +301,7 @@ flowchart TD
 | 用例ID | 场景 | 请求 | 期望结果 |
 |---|---|---|---|
 | TC-AUTH-01 | 注册成功 | `POST /3` body: `user=abc&passwd=123` | JSON：code=200，DB 插入成功 |
-| TC-AUTH-02 | 重复注册 | 再次 `POST /3` 同用户名 | JSON：code=400（User Exist） |
+| TC-AUTH-02 | 重复��册 | 再次 `POST /3` 同用户名 | JSON：code=400（User Exist） |
 | TC-AUTH-03 | 登录成功 | `POST /2` 正确账号 | JSON：code=200；响应头含 `Set-Cookie: is_login=true` |
 | TC-AUTH-04 | 登录失败 | `POST /2` 密码错误 | JSON：code=401 |
 
