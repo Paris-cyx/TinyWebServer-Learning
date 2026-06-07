@@ -19,18 +19,57 @@
 
 ```mermaid
 erDiagram
+    %% 物理数据库实体
     USER {
-        char(50) username PK "用户名（业务上应唯一；建议 NOT NULL + UNIQUE）"
-        char(50) passwd       "密码（当前明文存储，仅学习用途；生产应加盐哈希）"
+        varchar username PK "用户名 (主键)"
+        varchar passwd "密码"
     }
+
+    %% 系统业务抽象实体
+    HTTP_CONN {
+        int sockfd PK "套接字描述符"
+        varchar client_ip "客户端IP地址"
+        int check_state "主状态机当前状态"
+        int method "HTTP请求方法(GET/POST)"
+        varchar read_buf "应用层读缓冲区"
+        varchar write_buf "应用层写缓冲区"
+    }
+
+    THREAD_POOL {
+        int pool_id PK "线程池实例ID"
+        int thread_number "固定工作线程数量"
+        int max_requests "请求队列最大允许长度"
+    }
+
+    SQL_CONN_POOL {
+        int pool_id PK "数据库连接池ID"
+        varchar url "数据库主机地址"
+        varchar db_name "目标数据库名"
+        int max_conn "最大连接数"
+        int free_conn "当前空闲连接数"
+    }
+
+    TIMER {
+        int timer_id PK "定时器节点ID"
+        time expire "连接超时绝对时间"
+        func cb_func "超时回调断开函数"
+    }
+
+    LOG {
+        int log_id PK "日志实例ID"
+        varchar file_name "日志文件基础名称"
+        int split_lines "单文件最大行数拆分阈值"
+        int log_buf_size "异步写缓冲区大小"
+    }
+
+    %% 实体间的业务流转关系
+    THREAD_POOL ||--o{ HTTP_CONN : "提取并执行业务逻辑 (processes)"
+    HTTP_CONN }o--|| SQL_CONN_POOL : "申请并使用数据库连接 (acquires)"
+    HTTP_CONN ||--o| USER : "执行登录/注册鉴权 (validates)"
+    HTTP_CONN ||--|| TIMER : "绑定生命周期超时控制 (binds)"
+    HTTP_CONN }o--|| LOG : "触发并写入运行状态 (writes)"
+    SQL_CONN_POOL ||--o{ USER : "底层直接执行增查操作 (queries)"
 ```
-
-#### 说明（与代码映射）
-- 表名 `user` 来自 README 的建表 SQL。
-- `src/http_conn.cpp` 启动时会执行：`SELECT username, passwd FROM user` 并加载到内存 `map<string,string> users`。
-- 注册时执行：`INSERT INTO user(username, passwd) VALUES(...)`。
-- 登录时读取内存 `users[name]` 对比密码。
-
 ---
 
 ### 1.2 数据结构表（带说明）
